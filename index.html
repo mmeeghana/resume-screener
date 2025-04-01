@@ -1,0 +1,268 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Resume Screener</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      padding: 2rem 4vw;
+    }
+
+    header {
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      color: #38bdf8;
+      margin-bottom: 0.25rem;
+    }
+
+    header p {
+      font-size: 1rem;
+      color: #94a3b8;
+    }
+
+    main {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    section {
+      margin-bottom: 2rem;
+    }
+
+    textarea, input[type="file"], button {
+      width: 100%;
+      padding: 1rem;
+      margin-top: 0.75rem;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      background-color: #1e293b;
+      color: white;
+    }
+
+    textarea {
+      min-height: 150px;
+      resize: vertical;
+    }
+
+    button {
+      background-color: #2563eb;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      margin-top: 1rem;
+    }
+
+    button:hover {
+      background-color: #1d4ed8;
+    }
+
+    #output, #aiSuggestions {
+      margin-top: 1rem;
+    }
+
+    .badge {
+      display: inline-block;
+      margin: 5px 8px 5px 0;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: white;
+    }
+
+    .success {
+      background-color: #22c55e;
+    }
+
+    .danger {
+      background-color: #ef4444;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      line-height: 1.5;
+      color: #facc15;
+      background-color: transparent;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AI Resume Screener</h1>
+    <p>Smartly analyze resumes using GPT-style insights</p>
+  </header>
+
+  <main>
+    <section>
+      <label for="resume">Upload Resume (.pdf or .txt):</label>
+      <input type="file" id="resume" accept=".pdf,.txt" />
+    </section>
+
+    <section>
+      <label for="jobDescription">Paste Job Description:</label>
+      <textarea id="jobDescription" placeholder="Enter job description here..."></textarea>
+    </section>
+
+    <section>
+      <button onclick="submitForm()">Analyze</button>
+      <button onclick="getAISuggestions()">💡 Get AI Suggestions</button>
+    </section>
+
+    <section id="output"></section>
+    <section id="aiSuggestions"></section>
+  </main>
+
+  <script>
+    async function submitForm() {
+      const resumeFile = document.getElementById('resume').files[0];
+      const jobDescription = document.getElementById('jobDescription').value;
+      const output = document.getElementById('output');
+  
+      if (!resumeFile || !jobDescription) {
+        alert('Please upload a resume and paste the job description.');
+        return;
+      }
+  
+      output.innerText = '🧠 Analyzing...';
+  
+      const fileType = resumeFile.name.split('.').pop().toLowerCase();
+  
+      if (fileType === 'txt') {
+        // Plain text resume handling
+        const reader = new FileReader();
+        reader.onload = async function () {
+          const resumeText = reader.result;
+  
+          try {
+            const response = await fetch('http://localhost:5000/api/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ resume: resumeText, jobDescription })
+            });
+  
+            const data = await response.json();
+            displayResults(data);
+          } catch (err) {
+            output.innerText = '❌ Error analyzing text resume.';
+            console.error(err);
+          }
+        };
+        reader.readAsText(resumeFile);
+      } else if (fileType === 'pdf') {
+        // PDF resume handling
+        const formData = new FormData();
+        formData.append('resume', resumeFile);
+        formData.append('jobDescription', jobDescription);
+  
+        try {
+          const response = await fetch('http://localhost:5000/api/analyze-pdf', {
+            method: 'POST',
+            body: formData
+          });
+  
+          const data = await response.json();
+          displayResults(data);
+        } catch (err) {
+          output.innerText = '❌ Error analyzing PDF resume.';
+          console.error(err);
+        }
+      } else {
+        output.innerText = '❌ Unsupported file format. Please upload .txt or .pdf';
+      }
+    }
+  
+    function displayResults(data) {
+  const { score, skillsMatched, skillsMissing } = data;
+  const output = document.getElementById('output');
+
+  const matchedTags = skillsMatched.map(skill =>
+    `<span class="badge success">${skill}</span>`
+  ).join(' ');
+
+  const missingTags = skillsMissing.map(skill =>
+    `<span class="badge danger">${skill}</span>`
+  ).join(' ');
+
+  output.innerHTML = `
+    <h3>✅ Match Score: ${score}%</h3>
+    <p><strong>Skills Matched:</strong><br>${matchedTags || 'None'}</p>
+    <p><strong>Missing Skills:</strong><br>${missingTags || 'None'}</p>
+  `;
+}
+
+async function getAISuggestions() {
+  const resumeFile = document.getElementById('resume').files[0];
+  const jobDescription = document.getElementById('jobDescription').value;
+  const suggestionDiv = document.getElementById('aiSuggestions');
+
+  if (!resumeFile || !jobDescription) {
+    alert('Please upload a resume and enter job description.');
+    return;
+  }
+
+  suggestionDiv.innerHTML = "🤖 Thinking...";
+
+  const fileType = resumeFile.name.split('.').pop().toLowerCase();
+
+  if (fileType === 'txt') {
+    const reader = new FileReader();
+    reader.onload = async function () {
+      const resumeText = reader.result;
+
+      try {
+        const response = await fetch('http://localhost:5000/api/suggest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume: resumeText, jobDescription })
+        });
+
+        const data = await response.json();
+        suggestionDiv.innerHTML = `<pre style="white-space: pre-wrap;">${data.suggestions}</pre>`;
+      } catch (err) {
+        console.error(err);
+        suggestionDiv.innerHTML = "❌ Failed to get suggestions.";
+      }
+    };
+    reader.readAsText(resumeFile);
+  } else if (fileType === 'pdf') {
+    const formData = new FormData();
+    formData.append('resume', resumeFile);
+    formData.append('jobDescription', jobDescription);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/suggest-pdf', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+      suggestionDiv.innerHTML = `<pre style="white-space: pre-wrap;">${data.suggestions}</pre>`;
+    } catch (err) {
+      console.error(err);
+      suggestionDiv.innerHTML = "❌ Failed to get PDF suggestions.";
+    }
+  } else {
+    suggestionDiv.innerHTML = "❌ Only .txt and .pdf files are supported.";
+  }
+}
+
+
+  </script>
+</body>
+</html>
